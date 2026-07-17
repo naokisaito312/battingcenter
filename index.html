@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual Batting Center</title>
+    <title>MLB Home Plate Studio - Pitcher Sync</title>
 
     <!-- TensorFlow.js & MoveNet -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
@@ -86,7 +86,7 @@
             z-index: 5;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
             width: max-content;
             max-width: 95%;
             pointer-events: none;
@@ -107,9 +107,20 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
         }
 
+        /* パネル内のセクションラベル */
+        .group-label {
+            color: #00a86b;
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            white-space: nowrap;
+            border-right: 2px solid #1e2942;
+            padding-right: 12px;
+            margin-right: -4px;
+        }
+
         /* URL入力エリア */
         .controls-container input[type="text"] {
-            width: 200px;
+            width: 160px;
             padding: 8px 12px;
             border-radius: 2px;
             border: 1px solid #3a4b6e;
@@ -122,23 +133,31 @@
 
         /* MLB風フラットボタン */
         .btn-mlb {
-            padding: 8px 16px;
+            padding: 8px 14px;
             border-radius: 2px;
             border: none;
             background: #ffffff;
             color: #0a1128;
             font-weight: 900;
-            font-size: 12px;
+            font-size: 11px;
             letter-spacing: 1px;
             cursor: pointer;
             transition: all 0.2s ease;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             text-transform: uppercase;
+            white-space: nowrap;
         }
 
         .btn-mlb:hover {
             background: #00a86b; /* ホバーでスタジアムグリーンへ変更 */
             color: #ffffff;
+        }
+
+        /* プリセット用の少しスマートなボタン */
+        .btn-preset {
+            background: #223154;
+            color: #ffffff;
+            border: 1px solid #3a4b6e;
         }
 
         /* メインアクションボタン(LOAD) */
@@ -167,13 +186,14 @@
             align-items: center;
             gap: 8px;
             letter-spacing: 1px;
+            white-space: nowrap;
         }
 
         input[type="range"] {
             -webkit-appearance: none;
             background: #121b2d;
             height: 6px;
-            width: 100px;
+            width: 90px;
             border: 1px solid #3a4b6e;
             outline: none;
         }
@@ -204,11 +224,21 @@
 
     <!-- 下部操作メニュー -->
     <div class="controls-container">
+        <!-- プリセット動画選択用クイックバー -->
         <div class="control-group">
-            <!-- YouTube読み込み・コントロール -->
-            <input type="text" id="youtubeUrl" placeholder="ENTER YOUTUBE URL OR ID...">
-            <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD PITCHER</button>
+            <span class="group-label">PLAY PRESET</span>
+            <button class="btn-mlb btn-preset btn-active" id="preset1" onclick="loadPresetVideo('lFxjc-gulUk', 'preset1')">① プロ投手 投球映像</button>
+            <button class="btn-mlb btn-preset" id="preset2" onclick="loadPresetVideo('O4qTiUaqFV0', 'preset2')">② 大谷翔平 フォーム</button>
+        </div>
+
+        <!-- メインコントロールバー -->
+        <div class="control-group">
+            <span class="group-label">CONTROLS</span>
+            <!-- 任意のYouTube読み込み -->
+            <input type="text" id="youtubeUrl" placeholder="PASTE YOUTUBE URL...">
+            <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD URL</button>
             
+            <!-- 再生制御 -->
             <button class="btn-mlb" onclick="seekRelative(-10)">-10s</button>
             <button class="btn-mlb" id="playPauseBtn" onclick="togglePlay()">PAUSE</button>
             <button class="btn-mlb" onclick="seekRelative(10)">+10s</button>
@@ -219,7 +249,7 @@
             
             <!-- 透明度調整スライダー -->
             <label>
-                PITCHER OPACITY
+                OPACITY
                 <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.05" value="0.5" oninput="changeOpacity(this.value)">
             </label>
         </div>
@@ -252,7 +282,7 @@
         }
         window.addEventListener('DOMContentLoaded', initCamera);
 
-        // 2. YouTube Iframe API 初期化 (デフォルト動画IDを設定)
+        // 2. YouTube Iframe API 初期化 (初期状態で「① プロ投手 投球映像」をロード)
         const tag = document.createElement('script');
         tag.src = "https://www.youtube.com/iframe_api";
         const firstScriptTag = document.getElementsByTagName('script')[0];
@@ -260,7 +290,7 @@
         
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
-                videoId: 'lFxjc-gulUk', // デフォルトの投球動画IDをセット
+                videoId: 'lFxjc-gulUk', // デフォルト：「プロ投手の投球を打ってみよう！」
                 playerVars: { 
                     'autoplay': 0, 
                     'controls': 0, 
@@ -298,8 +328,25 @@
             if (videoId && player && isPlayerReady) {
                 player.loadVideoById({ videoId: videoId });
                 document.getElementById('playPauseBtn').innerText = "PAUSE";
+                
+                // カスタムURL読み込み時はプリセットボタンのハイライトをリセット
+                document.getElementById('preset1').classList.remove('btn-active');
+                document.getElementById('preset2').classList.remove('btn-active');
             } else {
                 alert('有効なYouTubeのURLを入力するか、読み込み準備が整うまでお待ちください。');
+            }
+        }
+
+        // プリセットボタン専用の切り替え関数
+        function loadPresetVideo(videoId, targetBtnId) {
+            if (player && isPlayerReady) {
+                player.loadVideoById({ videoId: videoId });
+                document.getElementById('playPauseBtn').innerText = "PAUSE";
+
+                // ボタンのハイライト状態を切り替え
+                document.getElementById('preset1').classList.remove('btn-active');
+                document.getElementById('preset2').classList.remove('btn-active');
+                document.getElementById(targetBtnId).classList.add('btn-active');
             }
         }
         
@@ -338,7 +385,7 @@
             document.getElementById('videoContainer').style.opacity = value;
         }
 
-        // キーボードショートカット (バットを持ちながら操作しやすいよう配慮)
+        // キーボードショートカット (バットを持ったまま操作しやすく)
         document.addEventListener('keydown', (event) => {
             if (document.activeElement.tagName === 'INPUT') return;
             if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
@@ -356,7 +403,6 @@
             renderLoop();
         }
 
-        // 骨格をつなぐラインのインデックスペア
         const connections = [
             [5, 6], [5, 7], [7, 9], [6, 8], [8, 10], // 上半身・腕
             [5, 11], [6, 12], [11, 12],               // 体幹
@@ -370,14 +416,12 @@
                 return;
             }
 
-            // キャンバスサイズを追従
             if (canvasElement.width !== window.innerWidth || canvasElement.height !== window.innerHeight) {
                 canvasElement.width = window.innerWidth;
                 canvasElement.height = window.innerHeight;
             }
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-            // カメラ映像のアスペクト比に合わせてスケールを計算
             const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
             const areaRatio = canvasElement.width / canvasElement.height;
             let scale;
@@ -398,7 +442,6 @@
                 if (poses.length > 0) {
                     const currentPose = poses[0];
                     
-                    // スムージング処理
                     if (smoothedKeypoints.length === 0) {
                         smoothedKeypoints = JSON.parse(JSON.stringify(currentPose.keypoints));
                     } else {
@@ -412,12 +455,10 @@
                         }
                     }
 
-                    // 自分のカメラ映像は反転(scaleX(-1))させているため、骨格も鏡面として描画座標を計算
                     const getMirroredX = (rawX) => {
                         return (videoElement.videoWidth - rawX) * scale + offsetX;
                     };
 
-                    // ボーン（線）の描画：野球のインジケーターやネオンをイメージした蛍光グリーン
                     canvasCtx.save();
                     for (let i = 0; i < connections.length; i++) {
                         const pt1 = smoothedKeypoints[connections[i][0]];
@@ -432,7 +473,7 @@
                             canvasCtx.beginPath();
                             canvasCtx.moveTo(x1, y1);
                             canvasCtx.lineTo(x2, y2);
-                            canvasCtx.strokeStyle = '#00ff88'; 
+                            canvasCtx.strokeStyle = '#00ff88'; /* 芝生をイメージしたネオングリーン */
                             canvasCtx.lineWidth = 8;
                             canvasCtx.lineCap = 'round';
                             canvasCtx.shadowColor = '#00ff88';
@@ -441,7 +482,6 @@
                         }
                     }
 
-                    // ジョイント（点）の描画：見えやすい純白のドット
                     smoothedKeypoints.forEach((kp) => {
                         if (kp.score > 0.20) {
                             const cx = getMirroredX(kp.x);
