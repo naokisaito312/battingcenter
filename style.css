@@ -1,0 +1,393 @@
+/* ===========================================
+   Base
+=========================================== */
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html,
+body{
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#030712;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+
+/* ===========================================
+   Camera
+=========================================== */
+
+#webcam{
+
+    position:absolute;
+
+    inset:0;
+
+    width:100%;
+
+    height:100%;
+
+    object-fit:contain;
+
+    transform:scaleX(-1);
+
+    background:#030712;
+
+    z-index:1;
+
+    transition:.45s;
+}
+
+
+/* ===========================================
+   YouTube
+=========================================== */
+
+.video-container{
+
+    position:absolute;
+
+    inset:0;
+
+    width:100%;
+
+    height:100%;
+
+    z-index:2;
+
+    transition:.45s;
+
+    pointer-events:none;
+
+}
+
+
+#player{
+
+    width:100%;
+
+    height:100%;
+
+}
+
+
+#player iframe{
+
+    width:100%!important;
+
+    height:100%!important;
+
+}
+
+
+/* ===========================================
+   Overlay
+=========================================== */
+
+.video-container.mode-overlay{
+
+    opacity:.5;
+
+}
+
+
+body.mode-overlay-active #webcam{
+
+    inset:0;
+
+}
+
+
+/* ===========================================
+   Mini
+=========================================== */
+
+.video-container.mode-mini{
+
+    width:25vw;
+
+    height:calc(25vw * 9 / 16);
+
+    top:20px;
+
+    right:20px;
+
+    left:auto;
+
+    border-radius:8px;
+
+    overflow:hidden;
+
+    border:1px solid rgba(0,255,136,.5);
+
+    box-shadow:0 12px 40px rgba(0,0,0,.7);
+
+    pointer-events:auto;
+
+    opacity:1;
+
+}
+
+
+body.mode-mini-active #webcam{
+
+    inset:0;
+
+}
+
+
+/* ===========================================
+   Split H
+=========================================== */
+
+.video-container.mode-split-h{
+
+    width:50vw;
+
+    height:100vh;
+
+    left:0;
+
+    top:0;
+
+    opacity:1;
+
+    pointer-events:auto;
+
+}
+
+
+body.split-h-active #webcam{
+
+    left:50vw;
+
+    width:50vw;
+
+    height:100vh;
+
+}
+
+
+/* ===========================================
+   Split V
+=========================================== */
+
+.video-container.mode-split-v{
+
+    width:100vw;
+
+    height:50vh;
+
+    left:0;
+
+    top:0;
+
+    opacity:1;
+
+    pointer-events:auto;
+
+}
+
+
+body.split-v-active #webcam{
+
+    top:50vh;
+
+    width:100vw;
+
+    height:50vh;
+
+}
+
+
+/* ===========================================
+   Mirror
+=========================================== */
+
+.video-container.mirror #player{
+
+    transform:scaleX(-1);
+
+}
+
+
+/* ===========================================
+   Pose Canvas
+=========================================== */
+
+#poseCanvas{
+
+    position:absolute;
+
+    inset:0;
+
+    width:100%;
+
+    height:100%;
+
+    pointer-events:none;
+
+    z-index:3;
+
+    display:none;
+
+}
+
+
+/* ===========================================
+   Controls
+=========================================== */
+
+.controls-container{
+
+    position:absolute;
+
+    left:50%;
+
+    bottom:20px;
+
+    transform:translateX(-50%);
+
+    z-index:10;
+
+}
+
+
+.control-group{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    padding:10px 16px;
+
+    border-radius:30px;
+
+    background:rgba(12,16,28,.72);
+
+    backdrop-filter:blur(16px);
+
+    border:1px solid rgba(255,255,255,.08);
+
+    border-bottom:2px solid rgba(0,255,136,.35);
+
+}
+
+
+.group-divider{
+
+    width:1px;
+
+    height:18px;
+
+    background:rgba(255,255,255,.12);
+
+}
+
+
+/* ===========================================
+   Buttons
+=========================================== */
+
+.btn-mlb{
+
+    padding:6px 12px;
+
+    border:none;
+
+    border-radius:16px;
+
+    cursor:pointer;
+
+    color:white;
+
+    background:rgba(255,255,255,.08);
+
+    transition:.2s;
+
+    font-size:11px;
+
+    font-weight:600;
+
+}
+
+
+.btn-mlb:hover{
+
+    background:rgba(255,255,255,.16);
+
+}
+
+
+.btn-active{
+
+    background:rgba(0,255,136,.22);
+
+    color:#00ff88;
+
+}
+
+
+.btn-json{
+
+    background:rgba(0,240,255,.22);
+
+    color:#00f0ff;
+
+}
+
+
+/* ===========================================
+   Input
+=========================================== */
+
+input[type=text]{
+
+    width:180px;
+
+    padding:7px 12px;
+
+    border:none;
+
+    outline:none;
+
+    border-radius:16px;
+
+    color:white;
+
+    background:rgba(255,255,255,.08);
+
+}
+
+
+input[type=range]{
+
+    width:70px;
+
+}
+
+
+/* ===========================================
+   Label
+=========================================== */
+
+label{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    color:#bbb;
+
+    font-size:10px;
+
+}
