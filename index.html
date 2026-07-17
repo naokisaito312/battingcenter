@@ -1,150 +1,837 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLB Home Plate Studio - Pitcher Sync</title>
 
-    <title>MLB Home Plate Studio</title>
-
-    <link rel="stylesheet" href="style.css">
-
-    <!-- TensorFlow -->
+    <!-- TensorFlow.js & MoveNet -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-</head>
 
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #030712;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 自分のカメラ映像：画面全体に表示されるよう設定を固定 */
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain; 
+            transform: scaleX(-1); /* 鏡モード */
+            z-index: 1;
+            background-color: #030712;
+            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        /* プロの投球映像コンテナ：サイズが潰れないよう固定 */
+        .video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2;
+            pointer-events: none;
+            background-color: transparent;
+            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        /* YouTubeプレーヤー要素のサイズ崩れを完全に防止 */
+        #player {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+
+        /* YouTube APIが自動生成するiframeを強制的にコンテナにフィットさせる */
+        #player iframe, .video-container iframe {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        /* --- 画面レイアウト制御 (モード切り替え時のスタイル定義) --- */
+        /* OVERLAY (重畳) */
+        .video-container.mode-overlay {
+            top: 0; left: 0; width: 100vw; height: 100vh; opacity: 0.5; 
+        }
+        body.mode-overlay-active #webcam {
+            top: 0; left: 0; width: 100vw; height: 100vh;
+        }
+        
+        /* MINI (PIP) */
+        .video-container.mode-mini {
+            top: 20px; left: calc(100vw - 25vw - 20px); width: 25vw; height: calc(25vw * 9 / 16);
+            opacity: 1.0 !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+            border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 255, 136, 0.5); pointer-events: auto;
+        }
+        body.mode-mini-active #webcam {
+            top: 0; left: 0; width: 100vw; height: 100vh;
+        }
+        
+        /* SPLIT: H (左右横並び) */
+        .video-container.mode-split-h { 
+            top: 0; left: 0; width: 50vw; height: 100vh; opacity: 1.0 !important; pointer-events: auto; 
+        }
+        body.split-h-active #webcam { 
+            top: 0; left: 50vw; width: 50vw; height: 100vh; 
+        }
+        
+        /* SPLIT: V (上下縦並び) */
+        .video-container.mode-split-v { 
+            top: 0; left: 0; width: 100vw; height: 50vh; opacity: 1.0 !important; pointer-events: auto; 
+        }
+        body.split-v-active #webcam { 
+            top: 50vh; left: 0; width: 100vw; height: 50vh; 
+        }
+
+        /* YouTube動画のミラー反転 */
+        .video-container.mirrored #player { transform: scaleX(-1); }
+
+        /* 骨格キャンバス */
+        #poseCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 3;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* --- サイバーミニマル・コントロールバー --- */
+        .controls-container {
+            position: absolute;
+            bottom: 16px; 
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            width: max-content;
+            max-width: 98%;
+            pointer-events: none;
+        }
+
+        .control-group {
+            pointer-events: auto;
+            background: rgba(8, 12, 24, 0.75); 
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 2px solid rgba(0, 255, 136, 0.4); 
+            padding: 6px 14px; 
+            border-radius: 30px; 
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .group-divider {
+            width: 1px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.15);
+            margin: 0 4px;
+        }
+
+        .controls-container input[type="text"] {
+            width: 110px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+            color: #ffffff;
+            font-size: 11px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .controls-container input[type="text"]:focus {
+            border-color: rgba(0, 255, 136, 0.5);
+            width: 140px; 
+        }
+
+        .btn-mlb {
+            padding: 5px 11px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 600;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            white-space: nowrap;
+        }
+
+        .btn-mlb:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-preset {
+            background: rgba(0, 255, 136, 0.04);
+            border: 1px solid rgba(0, 255, 136, 0.15);
+            color: rgba(0, 255, 136, 0.85);
+        }
+        .btn-preset:hover {
+            background: rgba(0, 255, 136, 0.12);
+            color: #00ff88;
+        }
+
+        .btn-load {
+            background: #00a86b;
+            color: #ffffff;
+            border: none;
+        }
+        .btn-load:hover {
+            background: #00ff88;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+        }
+
+        .btn-active {
+            background: rgba(0, 255, 136, 0.2) !important;
+            color: #00ff88 !important;
+            border: 1px solid rgba(0, 255, 136, 0.4) !important;
+            text-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
+        }
+
+        /* YouTube骨格JSON読込ボタン用アクティブ表示 */
+        .btn-active-blue {
+            background: rgba(0, 240, 255, 0.2) !important;
+            color: #00f0ff !important;
+            border: 1px solid rgba(0, 240, 255, 0.4) !important;
+            text-shadow: 0 0 4px rgba(0, 240, 255, 0.5);
+        }
+
+        .disabled-ui {
+            opacity: 0.2;
+            pointer-events: none;
+        }
+
+        .controls-container label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 9px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            margin-left: 4px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            height: 3px; 
+            width: 60px;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            background: #00ff88;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 6px #00ff88;
+            transition: transform 0.1s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+        }
+    </style>
+</head>
 <body class="mode-overlay-active">
 
-    <!-- YouTube -->
-    <div id="videoContainer" class="video-container mode-overlay">
+    <!-- プロの投球映像 (YouTube コンテナ) -->
+    <div class="video-container mode-overlay" id="videoContainer">
         <div id="player"></div>
     </div>
 
-    <!-- Camera -->
-    <video
-        id="webcam"
-        autoplay
-        muted
-        playsinline>
-    </video>
-
-    <!-- Pose -->
+    <!-- 自分の打撃映像 (Webcam) -->
+    <video id="webcam" autoplay playsinline></video>
+    
+    <!-- 骨格描画用キャンバス -->
     <canvas id="poseCanvas"></canvas>
 
-    <!-- Hidden JSON -->
-    <input
-        id="jsonFileInput"
-        type="file"
-        accept=".json"
-        hidden>
-
-    <!-- UI -->
+    <!-- 下部操作メニュー -->
     <div class="controls-container">
-
         <div class="control-group">
-
-            <!-- Preset -->
-
-            <button
-                id="preset1"
-                class="btn-mlb btn-preset btn-active">
-                PITCHER
-            </button>
-
-            <button
-                id="preset2"
-                class="btn-mlb btn-preset">
-                OTANI
-            </button>
-
+            <!-- プリセット切替 -->
+            <button class="btn-mlb btn-preset btn-active" id="preset1" onclick="loadPresetVideo('lFxjc-gulUk', 'preset1')">PITCHER</button>
+            <button class="btn-mlb btn-preset" id="preset2" onclick="loadPresetVideo('O4qTiUaqFV0', 'preset2')">OTANI</button>
+            
             <div class="group-divider"></div>
 
-            <!-- URL -->
-
-            <input
-                id="youtubeUrl"
-                type="text"
-                placeholder="Paste YouTube URL">
-
-            <button
-                id="loadBtn"
-                class="btn-mlb btn-load">
-                LOAD
-            </button>
-
+            <!-- URL読み込み -->
+            <input type="text" id="youtubeUrl" placeholder="PASTE URL...">
+            <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD</button>
+            
             <div class="group-divider"></div>
 
-            <!-- Player -->
-
-            <button id="backBtn" class="btn-mlb">
-                -10s
-            </button>
-
-            <button id="playPauseBtn" class="btn-mlb">
-                PLAY
-            </button>
-
-            <button id="forwardBtn" class="btn-mlb">
-                +10s
-            </button>
-
+            <!-- 再生制御コア -->
+            <button class="btn-mlb" onclick="seekRelative(-10)">-10s</button>
+            <button class="btn-mlb" id="playPauseBtn" onclick="togglePlay()">PAUSE</button>
+            <button class="btn-mlb" onclick="seekRelative(10)">+10s</button>
+            
             <div class="group-divider"></div>
 
-            <!-- View -->
-
-            <button
-                id="speedBtn"
-                class="btn-mlb">
-                1.0x
-            </button>
-
-            <button
-                id="modeBtn"
-                class="btn-mlb">
-                OVERLAY
-            </button>
-
-            <button
-                id="mirrorBtn"
-                class="btn-mlb">
-                MIRROR
-            </button>
-
-            <button
-                id="poseBtn"
-                class="btn-mlb">
-                POSE
-            </button>
-
-            <button
-                id="jsonBtn"
-                class="btn-mlb">
-                JSON
-            </button>
-
+            <!-- アプリケーション設定系 -->
+            <button class="btn-mlb" id="speedBtn" onclick="toggleSpeed()">1.0x</button>
+            <button class="btn-mlb" id="modeBtn" onclick="toggleMode()">OVERLAY</button>
+            <button class="btn-mlb" id="mirrorBtn" onclick="toggleYoutubeMirror()">MIRROR</button>
+            
+            <!-- 骨格検出（MoveNet）と 抽出JSON読み込み -->
+            <button class="btn-mlb" id="poseBtn" onclick="togglePose()">POSE</button>
+            <button class="btn-mlb" id="jsonBtn" onclick="triggerJsonUpload()">JSON</button>
+            <input type="file" id="jsonFileInput" accept=".json" style="display: none;" onchange="handleJsonUpload(event)">
+            
+            <!-- 不透明度調整 -->
             <label id="opacityLabel">
-
                 OPC
-
-                <input
-                    id="opacitySlider"
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.05"
-                    value="0.5">
-
+                <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.05" value="0.5" oninput="changeOpacity(this.value)">
             </label>
-
         </div>
-
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        let currentOpacity = 0.5;
+        let isMirrored = false;
+        let player = null;
+        let isPlayerReady = false;
+        let detector = null;
+        let poseActive = false;
 
+        // YouTube同期骨格データ
+        let youtubePoseData = null; 
+
+        let currentModeIndex = 0; 
+        const modes = ["OVERLAY", "MINI", "SPLIT: H", "SPLIT: V"];[cite: 3]
+
+        const canvasElement = document.getElementById('poseCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const videoElement = document.getElementById('webcam');
+        let smoothedKeypoints = [];
+
+        // 1. カメラ初期化
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+                videoElement.srcObject = stream;
+            } catch (error) {
+                console.error('カメラの取得に失敗しました:', error);
+            }
+        }
+        window.addEventListener('DOMContentLoaded', initCamera);
+
+        // 2. YouTube Iframe API 初期化
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                videoId: 'lFxjc-gulUk',
+                playerVars: { 
+                    'autoplay': 0, 
+                    'controls': 0, 
+                    'rel': 0, 
+                    'origin': window.location.origin
+                },
+                events: { 
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange 
+                }
+            });
+        }
+        
+        function onPlayerReady(event) {
+            isPlayerReady = true;
+        }
+
+        function onPlayerStateChange(event) {
+            const btn = document.getElementById('playPauseBtn');
+            if (!btn) return;
+            if (event.data === YT.PlayerState.PLAYING) { 
+                btn.innerText = "PAUSE"; 
+            } else { 
+                btn.innerText = "PLAY"; 
+            }
+        }
+        
+        // 3. 各種ハンドリング関数
+        function loadVideo() {
+            const input = document.getElementById('youtubeUrl').value;
+            let videoId = input;
+            if (input.includes('v=')) { videoId = input.split('v=')[1].split('&')[0]; }
+            else if (input.includes('youtu.be/')) { videoId = input.split('youtu.be/')[1].split('?')[0]; }
+        
+            if (videoId && player && isPlayerReady) {
+                player.loadVideoById({ videoId: videoId });
+                document.getElementById('playPauseBtn').innerText = "PAUSE";
+                
+                document.getElementById('preset1').classList.remove('btn-active');
+                document.getElementById('preset2').classList.remove('btn-active');
+            } else {
+                alert('有効なYouTubeのURLを入力してください。');
+            }
+        }
+
+        function loadPresetVideo(videoId, targetBtnId) {
+            if (player && isPlayerReady) {
+                player.loadVideoById({ videoId: videoId });
+                document.getElementById('playPauseBtn').innerText = "PAUSE";
+
+                document.getElementById('preset1').classList.remove('btn-active');
+                document.getElementById('preset2').classList.remove('btn-active');
+                document.getElementById(targetBtnId).classList.add('btn-active');
+            }
+        }
+        
+        function togglePlay() {
+            if (!player || !isPlayerReady) return;
+            const state = player.getPlayerState();
+            if (state === YT.PlayerState.PLAYING) { 
+                player.pauseVideo(); 
+            } else { 
+                player.playVideo(); 
+            }
+        }
+
+        function seekRelative(seconds) {
+            if (!player || !isPlayerReady) return;
+            player.seekTo(player.getCurrentTime() + seconds, true);
+        }
+
+        let currentSpeed = 1.0;[cite: 3]
+        function toggleSpeed() {
+            if (!player || !isPlayerReady) return;
+            currentSpeed = currentSpeed === 1.0 ? 0.75 : (currentSpeed === 0.75 ? 0.5 : 1.0);[cite: 3]
+            player.setPlaybackRate(currentSpeed);[cite: 3]
+            document.getElementById('speedBtn').innerText = `${currentSpeed}x`;[cite: 3]
+            
+            if (currentSpeed !== 1.0) {
+                document.getElementById('speedBtn').classList.add('btn-active');
+            } else {
+                document.getElementById('speedBtn').classList.remove('btn-active');
+            }
+        }
+
+        function toggleMode() {
+            const container = document.getElementById('videoContainer');[cite: 3]
+            const modeBtn = document.getElementById('modeBtn');[cite: 3]
+            const opacityLabel = document.getElementById('opacityLabel');[cite: 3]
+            const body = document.body;[cite: 3]
+        
+            currentModeIndex = (currentModeIndex + 1) % modes.length;[cite: 3]
+            const activeMode = modes[currentModeIndex];[cite: 3]
+            modeBtn.innerText = activeMode;
+        
+            container.className = "video-container";[cite: 3]
+            body.className = "";[cite: 3]
+            container.style.opacity = "";[cite: 3]
+            opacityLabel.classList.add('disabled-ui');[cite: 3]
+        
+            if (isMirrored) container.classList.add('mirrored');[cite: 3]
+            if (activeMode !== "OVERLAY") modeBtn.classList.add('btn-active');
+            else modeBtn.classList.remove('btn-active');
+        
+            if (activeMode === "OVERLAY") {[cite: 3]
+                container.classList.add('mode-overlay');[cite: 3]
+                body.classList.add('mode-overlay-active');[cite: 3]
+                container.style.opacity = currentOpacity;[cite: 3]
+                opacityLabel.classList.remove('disabled-ui');[cite: 3]
+            } else if (activeMode === "MINI") {[cite: 3]
+                container.classList.add('mode-mini');[cite: 3]
+                body.classList.add('mode-mini-active');[cite: 3]
+            } else if (activeMode === "SPLIT: H") {[cite: 3]
+                body.classList.add('split-h-active');[cite: 3]
+                container.classList.add('mode-split-h');[cite: 3]
+            } else if (activeMode === "SPLIT: V") {[cite: 3]
+                body.classList.add('split-v-active');[cite: 3]
+                container.classList.add('mode-split-v');[cite: 3]
+            }
+        }
+
+        function toggleYoutubeMirror() {
+            isMirrored = !isMirrored; 
+            const container = document.getElementById('videoContainer');
+            const btn = document.getElementById('mirrorBtn');
+            container.classList.toggle('mirrored', isMirrored);[cite: 3]
+            
+            if(isMirrored) {
+                btn.classList.add('btn-active');
+            } else {
+                btn.classList.remove('btn-active');
+            }
+        }
+
+        function changeOpacity(value) {
+            currentOpacity = value;
+            const container = document.getElementById('videoContainer');
+            if (container.classList.contains('mode-overlay')) {[cite: 3]
+                container.style.opacity = value;[cite: 3]
+            }
+        }
+
+        // --- JSON読み込み処理 ---
+        function triggerJsonUpload() {
+            document.getElementById('jsonFileInput').click();
+        }
+
+        function handleJsonUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    youtubePoseData = JSON.parse(e.target.result);
+                    document.getElementById('jsonBtn').classList.add('btn-active-blue');
+                    // JSON読込に成功したらキャンバス自動表示
+                    if (!poseActive) {
+                        togglePose();
+                    }
+                } catch (err) {
+                    alert('JSONの解析に失敗しました。正しい形式か確認してください。');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ショートカット
+        document.addEventListener('keydown', (event) => {
+            if (document.activeElement.tagName === 'INPUT') return;
+            if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
+            else if (event.code === 'ArrowLeft') { event.preventDefault(); seekRelative(-10); }
+            else if (event.code === 'ArrowRight') { event.preventDefault(); seekRelative(10); }
+        });
+
+        // 4. MoveNet 骨格ロジック
+        async function initPoseDetection() {
+            if (window.tf) { tf.env().set('WEBGL_FLUSH_THRESHOLD', -1); }[cite: 3]
+            detector = await poseDetection.createDetector([cite: 3]
+                poseDetection.SupportedModels.MoveNet,[cite: 3]
+                { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING }[cite: 3]
+            );
+            renderLoop();[cite: 3]
+        }
+
+        const connections = [
+            [5, 6], [5, 7], [7, 9], [6, 8], [8, 10],
+            [5, 11], [6, 12], [11, 12],
+            [11, 13], [13, 15], [12, 14], [14, 16]
+        ];
+
+        // 時間同期して動画用の骨格を取得する関数
+        function getYoutubePoseAtTime(time) {
+            if (!youtubePoseData) return null;
+            
+            // 1. JSONがフレーム配列の場合 (例: 30fps)
+            // 配列インデックス = Math.round(time * 30)
+            if (Array.isArray(youtubePoseData)) {
+                const fps = 30; // データのFPSに合わせて調整してください
+                const frameIndex = Math.round(time * fps);
+                if (frameIndex >= 0 && frameIndex < youtubePoseData.length) {
+                    return youtubePoseData[frameIndex];
+                }
+            } 
+            // 2. キー（タイムスタンプ）オブジェクトの場合
+            else if (typeof youtubePoseData === 'object') {
+                const keys = Object.keys(youtubePoseData).map(Number).sort((a, b) => a - b);
+                if (keys.length === 0) return null;
+                
+                // 最も近いタイムスタンプを検索
+                let closestKey = keys[0];
+                let minDiff = Math.abs(closestKey - time);
+                for (let i = 1; i < keys.length; i++) {
+                    const diff = Math.abs(keys[i] - time);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestKey = keys[i];
+                    }
+                }
+                return youtubePoseData[closestKey];
+            }
+            return null;
+        }
+
+        async function renderLoop() {
+            if (!poseActive) {
+                requestAnimationFrame(renderLoop);
+                return;
+            }
+
+            if (canvasElement.width !== window.innerWidth || canvasElement.height !== window.innerHeight) {
+                canvasElement.width = window.innerWidth;
+                canvasElement.height = window.innerHeight;
+            }
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            const activeMode = modes[currentModeIndex];[cite: 3]
+            
+            // --- 描画領域全体のスケール定義 ---
+            let camAreaWidth = canvasElement.width;[cite: 3]
+            let camAreaHeight = canvasElement.height;[cite: 3]
+            let camBaseOffsetX = 0;[cite: 3]
+            let camBaseOffsetY = 0;[cite: 3]
+
+            if (activeMode === "SPLIT: H") {[cite: 3]
+                camAreaWidth = canvasElement.width / 2;[cite: 3]
+                camBaseOffsetX = canvasElement.width / 2;[cite: 3]
+            }[cite: 3]
+            else if (activeMode === "SPLIT: V") {[cite: 3]
+                camAreaHeight = canvasElement.height / 2;[cite: 3]
+                camBaseOffsetY = canvasElement.height / 2;[cite: 3]
+            }[cite: 3]
+
+            const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
+            const areaRatio = camAreaWidth / camAreaHeight;[cite: 3]
+            let scale;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (areaRatio > videoRatio) {
+                scale = camAreaHeight / videoElement.videoHeight;[cite: 3]
+                offsetX = (camAreaWidth - (videoElement.videoWidth * scale)) / 2;[cite: 3]
+            } else {
+                scale = camAreaWidth / videoElement.videoWidth;[cite: 3]
+                offsetY = (camAreaHeight - (videoElement.videoHeight * scale)) / 2;[cite: 3]
+            }
+
+            const finalCamOffsetX = camBaseOffsetX + offsetX;[cite: 3]
+            const finalCamOffsetY = camBaseOffsetY + offsetY;[cite: 3]
+
+
+            // ==========================================
+            // A. カメラ骨格描画 (MoveNetによるリアルタイム検出)
+            // ==========================================
+            if (videoElement.readyState >= 2 && videoElement.videoWidth > 0 && detector) {
+                const poses = await detector.estimatePoses(videoElement);[cite: 3]
+
+                if (poses.length > 0) {
+                    const currentPose = poses[0];[cite: 1, 3]
+                    
+                    if (smoothedKeypoints.length === 0) {
+                        smoothedKeypoints = JSON.parse(JSON.stringify(currentPose.keypoints));[cite: 3]
+                    } else {
+                        for (let i = 0; i < currentPose.keypoints.length; i++) {
+                            const kp = currentPose.keypoints[i];
+                            if (kp.score > 0.15) {
+                                smoothedKeypoints[i].x = smoothedKeypoints[i].x * 0.6 + kp.x * 0.4;[cite: 3]
+                                smoothedKeypoints[i].y = smoothedKeypoints[i].y * 0.6 + kp.y * 0.4;[cite: 3]
+                                smoothedKeypoints[i].score = kp.score;[cite: 3]
+                            }
+                        }
+                    }
+
+                    const getMirroredX = (rawX) => {
+                        return (videoElement.videoWidth - rawX) * scale + finalCamOffsetX;[cite: 3]
+                    };
+
+                    canvasCtx.save();
+                    for (let i = 0; i < connections.length; i++) {
+                        const pt1 = smoothedKeypoints[connections[i][0]];[cite: 3]
+                        const pt2 = smoothedKeypoints[connections[i][1]];[cite: 3]
+                        
+                        if (pt1 && pt2 && pt1.score > 0.20 && pt2.score > 0.20) {
+                            const x1 = getMirroredX(pt1.x);[cite: 3]
+                            const y1 = pt1.y * scale + finalCamOffsetY;[cite: 3]
+                            const x2 = getMirroredX(pt2.x);[cite: 3]
+                            const y2 = pt2.y * scale + finalCamOffsetY;[cite: 3]
+
+                            canvasCtx.beginPath();
+                            canvasCtx.moveTo(x1, y1);
+                            canvasCtx.lineTo(x2, y2);
+                            canvasCtx.strokeStyle = '#00ff88'; // ネオングリーン
+                            canvasCtx.lineWidth = 6; 
+                            canvasCtx.lineCap = 'round';[cite: 3]
+                            canvasCtx.shadowColor = '#00ff88';[cite: 3]
+                            canvasCtx.shadowBlur = 10;
+                            canvasCtx.stroke();
+                        }
+                    }
+
+                    smoothedKeypoints.forEach((kp) => {
+                        if (kp.score > 0.20) {
+                            const cx = getMirroredX(kp.x);[cite: 3]
+                            const cy = kp.y * scale + finalCamOffsetY;[cite: 3]
+                            canvasCtx.beginPath();
+                            canvasCtx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                            canvasCtx.fillStyle = '#ffffff';[cite: 3]
+                            canvasCtx.fill();
+                        }
+                    });
+                    canvasCtx.restore();
+                }
+            }
+
+            // ==========================================
+            // B. YouTube同期骨格描画 (JSONから取得)
+            // ==========================================
+            if (player && isPlayerReady && youtubePoseData) {
+                const currentTime = player.getCurrentTime();
+                const ytPose = getYoutubePoseAtTime(currentTime);
+
+                if (ytPose) {
+                    // YouTube側表示領域のスケール定義
+                    let ytAreaWidth = canvasElement.width;
+                    let ytAreaHeight = canvasElement.height;
+                    let ytBaseOffsetX = 0;
+                    let ytBaseOffsetY = 0;
+
+                    if (activeMode === "MINI") {
+                        ytAreaWidth = canvasElement.width * 0.25;
+                        ytAreaHeight = ytAreaWidth * 9 / 16;
+                        ytBaseOffsetX = canvasElement.width - ytAreaWidth - 20;
+                        ytBaseOffsetY = 20;
+                    } else if (activeMode === "SPLIT: H") {
+                        ytAreaWidth = canvasElement.width / 2;
+                    } else if (activeMode === "SPLIT: V") {
+                        ytAreaHeight = canvasElement.height / 2;
+                    }
+
+                    // 元データのアスペクト比を16:9と仮定してマッピング
+                    const ytVideoWidth = 1280;
+                    const ytVideoHeight = 720;
+                    const ytVideoRatio = ytVideoWidth / ytVideoHeight;
+                    const ytAreaRatio = ytAreaWidth / ytAreaHeight;
+
+                    let ytScale;
+                    let ytOffsetX = 0;
+                    let ytOffsetY = 0;
+
+                    if (ytAreaRatio > ytVideoRatio) {
+                        ytScale = ytAreaHeight / ytVideoHeight;
+                        ytOffsetX = (ytAreaWidth - (ytVideoWidth * ytScale)) / 2;
+                    } else {
+                        ytScale = ytAreaWidth / ytVideoWidth;
+                        ytOffsetY = (ytAreaHeight - (ytVideoHeight * ytScale)) / 2;
+                    }
+
+                    const finalYtOffsetX = ytBaseOffsetX + ytOffsetX;
+                    const finalYtOffsetY = ytBaseOffsetY + ytOffsetY;
+
+                    // キーポイント変換用関数 (YouTube側のミラー設定に対応)
+                    const getProjectionX = (rawX) => {
+                        let finalX = rawX;
+                        // JSONデータが正規化(0.0〜1.0)されている場合はドット座標にスケール
+                        if (rawX <= 1.0) {
+                            finalX = rawX * ytVideoWidth;
+                        }
+                        // ミラー反転モード時の座標反転
+                        if (isMirrored) {
+                            finalX = ytVideoWidth - finalX;
+                        }
+                        return finalX * ytScale + finalYtOffsetX;
+                    };
+
+                    const getProjectionY = (rawY) => {
+                        let finalY = rawY;
+                        if (rawY <= 1.0) {
+                            finalY = rawY * ytVideoHeight;
+                        }
+                        return finalY * ytScale + finalYtOffsetY;
+                    };
+
+                    const keypoints = ytPose.keypoints || ytPose;
+
+                    if (keypoints && Array.isArray(keypoints)) {
+                        canvasCtx.save();
+                        // 1. スケルトンの描画
+                        for (let i = 0; i < connections.length; i++) {
+                            const pt1 = keypoints[connections[i][0]];
+                            const pt2 = keypoints[connections[i][1]];
+                            
+                            if (pt1 && pt2) {
+                                const score1 = pt1.score !== undefined ? pt1.score : 1.0;
+                                const score2 = pt2.score !== undefined ? pt2.score : 1.0;
+
+                                if (score1 > 0.20 && score2 > 0.20) {
+                                    const x1 = getProjectionX(pt1.x);
+                                    const y1 = getProjectionY(pt1.y);
+                                    const x2 = getProjectionX(pt2.x);
+                                    const y2 = getProjectionY(pt2.y);
+
+                                    canvasCtx.beginPath();
+                                    canvasCtx.moveTo(x1, y1);
+                                    canvasCtx.lineTo(x2, y2);
+                                    canvasCtx.strokeStyle = '#00f0ff'; // サイバーブルー
+                                    canvasCtx.lineWidth = 6;
+                                    canvasCtx.lineCap = 'round';
+                                    canvasCtx.shadowColor = '#00f0ff';
+                                    canvasCtx.shadowBlur = 10;
+                                    canvasCtx.stroke();
+                                }
+                            }
+                        }
+
+                        // 2. 関節点の描画
+                        keypoints.forEach((kp) => {
+                            const score = kp.score !== undefined ? kp.score : 1.0;
+                            if (score > 0.20) {
+                                const cx = getProjectionX(kp.x);
+                                const cy = getProjectionY(kp.y);
+                                canvasCtx.beginPath();
+                                canvasCtx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                                canvasCtx.fillStyle = '#ffffff';
+                                canvasCtx.fill();
+                            }
+                        });
+                        canvasCtx.restore();
+                    }
+                }
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        async function togglePose() {
+            poseActive = !poseActive;[cite: 3]
+            const btn = document.getElementById('poseBtn');
+            if (poseActive) {
+                canvasElement.style.display = 'block';[cite: 3]
+                btn.innerText = "LOAD..."; 
+                btn.disabled = true;[cite: 3]
+                if (!detector) {[cite: 3]
+                    await initPoseDetection();[cite: 3]
+                }
+                btn.disabled = false;[cite: 3]
+                btn.innerText = "POSE";
+                btn.classList.add('btn-active');
+            } else {
+                canvasElement.style.display = 'none';[cite: 3]
+                btn.innerText = "POSE";
+                btn.classList.remove('btn-active');
+            }
+        }
+    </script>
 </body>
-
 </html>
