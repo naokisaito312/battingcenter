@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLB Home Plate Studio - Pitcher Sync</title>
+
+    <!-- TensorFlow.js & MoveNet -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050a18; /* スタジアムの夜空をイメージしたディープネイビー */
+            font-family: 'Arial Black', 'Impact', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 映像要素の配置基盤 */
+        #webcam, .video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* 自分のカメラ映像 (鏡のように見せるため反転) */
+        #webcam {
+            z-index: 1;
+            transform: scaleX(-1);
+            background-color: #050a18;
+        }
+
+        /* プロの投球映像 (YouTube) */
+        .video-container {
+            z-index: 2;
+            pointer-events: none; /* 下層のカメラや操作を邪魔しない */
+            opacity: 0.5; /* 初期透明度 */
+            transition: opacity 0.2s ease, transform 0.3s ease;
+        }
+
+        #player {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* ミラーモード時の反転処理 */
+        .video-container.mirrored {
+            transform: scaleX(-1);
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* 骨格描画用キャンバス */
+        #poseCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 3;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* --- MLB風 GUI コントロールパネル --- */
+        .controls-container {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: max-content;
+            max-width: 95%;
+            pointer-events: none;
+        }
+
+        .control-group {
+            pointer-events: auto;
+            background: rgba(10, 17, 40, 0.85); /* 濃紺のソリッドなバックプレート */
+            backdrop-filter: blur(10px);
+            border: 2px solid #1e2942;
+            border-top: 2px solid #00a86b; /* 上部にスタジアムグリーンを配してMLBの芝を表現 */
+            padding: 10px 20px;
+            border-radius: 4px; /* プロスポーツのインフォグラフィックス風に角を立たせる */
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+        }
+
+        /* URL入力エリア */
+        .controls-container input[type="text"] {
+            width: 200px;
+            padding: 8px 12px;
+            border-radius: 2px;
+            border: 1px solid #3a4b6e;
+            background: #121b2d;
+            color: #ffffff;
+            font-size: 13px;
+            font-family: sans-serif;
+            outline: none;
+        }
+
+        /* MLB風フラットボタン */
+        .btn-mlb {
+            padding: 8px 16px;
+            border-radius: 2px;
+            border: none;
+            background: #ffffff;
+            color: #0a1128;
+            font-weight: 900;
+            font-size: 12px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            text-transform: uppercase;
+        }
+
+        .btn-mlb:hover {
+            background: #00a86b; /* ホバーでスタジアムグリーンへ変更 */
+            color: #ffffff;
+        }
+
+        /* メインアクションボタン(LOAD) */
+        .btn-load {
+            background: #00a86b;
+            color: white;
+        }
+        .btn-load:hover {
+            background: #00c880;
+        }
+
+        /* トグル状態で色が変わるボタン設定 */
+        .btn-active {
+            background: #00a86b !important;
+            color: #ffffff !important;
+            border: 1px solid #00c880;
+        }
+
+        /* スライダー（透明度調整） */
+        .controls-container label {
+            color: #ffffff;
+            font-size: 11px;
+            font-family: sans-serif;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 1px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: #121b2d;
+            height: 6px;
+            width: 100px;
+            border: 1px solid #3a4b6e;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #00a86b;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- プロの投球映像 (YouTube) -->
+    <div class="video-container" id="videoContainer">
+        <div id="player"></div>
+    </div>
+
+    <!-- 自分の打撃映像 (Webcam) -->
+    <video id="webcam" autoplay playsinline></video>
+    
+    <!-- 骨格描画用キャンバス -->
+    <canvas id="poseCanvas"></canvas>
+
+    <!-- 下部操作メニュー -->
+    <div class="controls-container">
+        <div class="control-group">
+            <!-- YouTube読み込み・コントロール -->
+            <input type="text" id="youtubeUrl" placeholder="ENTER YOUTUBE URL OR ID...">
+            <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD PITCHER</button>
+            
+            <button class="btn-mlb" onclick="seekRelative(-10)">-10s</button>
+            <button class="btn-mlb" id="playPauseBtn" onclick="togglePlay()">PAUSE</button>
+            <button class="btn-mlb" onclick="seekRelative(10)">+10s</button>
+            
+            <!-- 特殊エフェクト系 -->
+            <button class="btn-mlb" id="mirrorBtn" onclick="toggleYoutubeMirror()">MIRROR: OFF</button>
+            <button class="btn-mlb" id="poseBtn" onclick="togglePose()">POSE: OFF</button>
+            
+            <!-- 透明度調整スライダー -->
+            <label>
+                PITCHER OPACITY
+                <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.05" value="0.5" oninput="changeOpacity(this.value)">
+            </label>
+        </div>
+    </div>
+
+    <script>
+        let currentOpacity = 0.5;
+        let isMirrored = false;
+        let player = null;
+        let isPlayerReady = false;
+        let detector = null;
+        let poseActive = false;
+
+        const canvasElement = document.getElementById('poseCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const videoElement = document.getElementById('webcam');
+        let smoothedKeypoints = [];
+
+        // 1. カメラ初期化
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+                videoElement.srcObject = stream;
+            } catch (error) {
+                console.error('カメラの取得に失敗しました:', error);
+            }
+        }
+        window.addEventListener('DOMContentLoaded', initCamera);
+
+        // 2. YouTube Iframe API 初期化
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                playerVars: { 
+                    'autoplay': 0, 
+                    'controls': 0, 
+                    'rel': 0, 
+                    'origin': location.origin 
+                },
+                events: { 
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange 
+                }
+            });
+        }
+        
+        function onPlayerReady(event) {
+            isPlayerReady = true;
+        }
+
+        function onPlayerStateChange(event) {
+            const btn = document.getElementById('playPauseBtn');
+            if (!btn) return;
+            if (event.data === YT.PlayerState.PLAYING) { 
+                btn.innerText = "PAUSE"; 
+            } else { 
+                btn.innerText = "PLAY"; 
+            }
+        }
+        
+        // 3. 動画読み込み・コントロール関数
+        function loadVideo() {
+            const input = document.getElementById('youtubeUrl').value;
+            let videoId = input;
+            if (input.includes('v=')) { videoId = input.split('v=')[1].split('&')[0]; }
+            else if (input.includes('youtu.be/')) { videoId = input.split('youtu.be/')[1].split('?')[0]; }
+        
+            if (videoId && player && isPlayerReady) {
+                player.loadVideoById({ videoId: videoId });
+                document.getElementById('playPauseBtn').innerText = "PAUSE";
+            } else {
+                alert('有効なYouTubeのURLを入力するか、読み込み準備が整うまでお待ちください。');
+            }
+        }
+        
+        function togglePlay() {
+            if (!player || !isPlayerReady) return;
+            const state = player.getPlayerState();
+            if (state === YT.PlayerState.PLAYING) { 
+                player.pauseVideo(); 
+            } else { 
+                player.playVideo(); 
+            }
+        }
+
+        function seekRelative(seconds) {
+            if (!player || !isPlayerReady) return;
+            player.seekTo(player.getCurrentTime() + seconds, true);
+        }
+
+        function toggleYoutubeMirror() {
+            isMirrored = !isMirrored; 
+            const container = document.getElementById('videoContainer');
+            const btn = document.getElementById('mirrorBtn');
+            container.classList.toggle('mirrored', isMirrored);
+            
+            if(isMirrored) {
+                btn.innerText = "MIRROR: ON";
+                btn.classList.add('btn-active');
+            } else {
+                btn.innerText = "MIRROR: OFF";
+                btn.classList.remove('btn-active');
+            }
+        }
+
+        function changeOpacity(value) {
+            currentOpacity = value;
+            document.getElementById('videoContainer').style.opacity = value;
+        }
+
+        // キーボードショートカット (バットを持ちながら操作しやすいよう配慮)
+        document.addEventListener('keydown', (event) => {
+            if (document.activeElement.tagName === 'INPUT') return;
+            if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
+            else if (event.code === 'ArrowLeft') { event.preventDefault(); seekRelative(-10); }
+            else if (event.code === 'ArrowRight') { event.preventDefault(); seekRelative(10); }
+        });
+
+        // 4. 骨格検出 (MoveNet) ロジック
+        async function initPoseDetection() {
+            if (window.tf) { tf.env().set('WEBGL_FLUSH_THRESHOLD', -1); }
+            detector = await poseDetection.createDetector(
+                poseDetection.SupportedModels.MoveNet, 
+                { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING }
+            );
+            renderLoop();
+        }
+
+        // 骨格をつなぐラインのインデックスペア
+        const connections = [
+            [5, 6], [5, 7], [7, 9], [6, 8], [8, 10], // 上半身・腕
+            [5, 11], [6, 12], [11, 12],               // 体幹
+            [11, 13], [13, 15], [12, 14], [14, 16]    // 下半身・足
+        ];
+
+        async function renderLoop() {
+            if (!detector) return;
+            if (!poseActive) {
+                requestAnimationFrame(renderLoop);
+                return;
+            }
+
+            // キャンバスサイズを追従
+            if (canvasElement.width !== window.innerWidth || canvasElement.height !== window.innerHeight) {
+                canvasElement.width = window.innerWidth;
+                canvasElement.height = window.innerHeight;
+            }
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // カメラ映像のアスペクト比に合わせてスケールを計算
+            const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
+            const areaRatio = canvasElement.width / canvasElement.height;
+            let scale;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (areaRatio > videoRatio) {
+                scale = canvasElement.height / videoElement.videoHeight;
+                offsetX = (canvasElement.width - (videoElement.videoWidth * scale)) / 2;
+            } else {
+                scale = canvasElement.width / videoElement.videoWidth;
+                offsetY = (canvasElement.height - (videoElement.videoHeight * scale)) / 2;
+            }
+
+            if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
+                const poses = await detector.estimatePoses(videoElement);
+
+                if (poses.length > 0) {
+                    const currentPose = poses[0];
+                    
+                    // スムージング処理
+                    if (smoothedKeypoints.length === 0) {
+                        smoothedKeypoints = JSON.parse(JSON.stringify(currentPose.keypoints));
+                    } else {
+                        for (let i = 0; i < currentPose.keypoints.length; i++) {
+                            const kp = currentPose.keypoints[i];
+                            if (kp.score > 0.15) {
+                                smoothedKeypoints[i].x = smoothedKeypoints[i].x * 0.6 + kp.x * 0.4;
+                                smoothedKeypoints[i].y = smoothedKeypoints[i].y * 0.6 + kp.y * 0.4;
+                                smoothedKeypoints[i].score = kp.score;
+                            }
+                        }
+                    }
+
+                    // 自分のカメラ映像は反転(scaleX(-1))させているため、骨格も鏡面として描画座標を計算
+                    const getMirroredX = (rawX) => {
+                        return (videoElement.videoWidth - rawX) * scale + offsetX;
+                    };
+
+                    // ボーン（線）の描画：野球のインジケーターやネオンをイメージした蛍光グリーン
+                    canvasCtx.save();
+                    for (let i = 0; i < connections.length; i++) {
+                        const pt1 = smoothedKeypoints[connections[i][0]];
+                        const pt2 = smoothedKeypoints[connections[i][1]];
+                        
+                        if (pt1 && pt2 && pt1.score > 0.20 && pt2.score > 0.20) {
+                            const x1 = getMirroredX(pt1.x);
+                            const y1 = pt1.y * scale + offsetY;
+                            const x2 = getMirroredX(pt2.x);
+                            const y2 = pt2.y * scale + offsetY;
+
+                            canvasCtx.beginPath();
+                            canvasCtx.moveTo(x1, y1);
+                            canvasCtx.lineTo(x2, y2);
+                            canvasCtx.strokeStyle = '#00ff88'; 
+                            canvasCtx.lineWidth = 8;
+                            canvasCtx.lineCap = 'round';
+                            canvasCtx.shadowColor = '#00ff88';
+                            canvasCtx.shadowBlur = 15;
+                            canvasCtx.stroke();
+                        }
+                    }
+
+                    // ジョイント（点）の描画：見えやすい純白のドット
+                    smoothedKeypoints.forEach((kp) => {
+                        if (kp.score > 0.20) {
+                            const cx = getMirroredX(kp.x);
+                            const cy = kp.y * scale + offsetY;
+                            canvasCtx.beginPath();
+                            canvasCtx.arc(cx, cy, 5, 0, 2 * Math.PI);
+                            canvasCtx.fillStyle = '#ffffff';
+                            canvasCtx.fill();
+                        }
+                    });
+                    canvasCtx.restore();
+                }
+            }
+            requestAnimationFrame(renderLoop);
+        }
+
+        // 5. 骨格表示トグル
+        async function togglePose() {
+            poseActive = !poseActive;
+            const btn = document.getElementById('poseBtn');
+            if (poseActive) {
+                canvasElement.style.display = 'block';
+                btn.innerText = "LOADING..."; 
+                btn.disabled = true;
+                if (!detector) {
+                    await initPoseDetection();
+                }
+                btn.disabled = false;
+                btn.innerText = "POSE: ON";
+                btn.classList.add('btn-active');
+            } else {
+                canvasElement.style.display = 'none';
+                btn.innerText = "POSE: OFF";
+                btn.classList.remove('btn-active');
+            }
+        }
+    </script>
+</body>
+</html>
