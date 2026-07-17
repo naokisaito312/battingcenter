@@ -252,7 +252,7 @@
         }
         window.addEventListener('DOMContentLoaded', initCamera);
 
-        // 2. YouTube Iframe API 初期化
+        // 2. YouTube Iframe API 初期化 (デフォルト動画IDを設定)
         const tag = document.createElement('script');
         tag.src = "https://www.youtube.com/iframe_api";
         const firstScriptTag = document.getElementsByTagName('script')[0];
@@ -260,6 +260,7 @@
         
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
+                videoId: 'lFxjc-gulUk', // デフォルトの投球動画IDをセット
                 playerVars: { 
                     'autoplay': 0, 
                     'controls': 0, 
