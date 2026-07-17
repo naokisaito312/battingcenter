@@ -23,43 +23,50 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 映像ベース要素の初期化表示を確定 */
-        #webcam, .video-container {
+        /* 自分のカメラ映像：画面全体に表示されるよう設定を固定 */
+        #webcam {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain; 
+            transform: scaleX(-1); /* 鏡モード */
+            z-index: 1;
             background-color: #030712;
             transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        /* 自分のカメラ映像 */
-        #webcam {
-            object-fit: contain; 
-            transform: scaleX(-1); /* 鏡モード */
-            z-index: 1;
-        }
-
-        /* プロの投球映像コンテナ */
+        /* プロの投球映像コンテナ：サイズが潰れないよう固定 */
         .video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             z-index: 2;
             pointer-events: none;
+            background-color: transparent;
+            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
+        /* YouTubeプレーヤー要素のサイズ崩れを完全に防止 */
         #player {
-            width: 100%;
-            height: 100%;
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
         }
 
-        #player iframe {
+        /* YouTube APIが自動生成するiframeを強制的にコンテナにフィットさせる */
+        #player iframe, .video-container iframe {
             width: 100% !important;
             height: 100% !important;
             object-fit: contain;
+            pointer-events: none;
         }
 
-        /* --- 画面レイアウト制御 (サイズが潰れないよう明示化) --- */
-        /* OVERLAY (重畳) */
+        /* --- 画面レイアウト制御 (モード切り替え時のスタイル定義) --- */
+        /* OVERLAY (重畳：初期状態) */
         .video-container.mode-overlay {
             top: 0; left: 0; width: 100vw; height: 100vh; opacity: 0.5; 
         }
