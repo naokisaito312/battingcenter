@@ -205,7 +205,13 @@
             border: 1px solid rgba(0, 255, 136, 0.4) !important;
             text-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
         }
-
+        /* YouTube骨格JSON読込ボタン用アクティブ表示 */
+        .btn-active-blue {
+            background: rgba(0, 240, 255, 0.2) !important;
+            color: #00f0ff !important;
+            border: 1px solid rgba(0, 240, 255, 0.4) !important;
+            text-shadow: 0 0 4px rgba(0, 240, 255, 0.5);
+        }
         .disabled-ui {
             opacity: 0.2;
             pointer-events: none;
@@ -274,8 +280,11 @@
             <input type="text" id="youtubeUrl" placeholder="PASTE URL...">
             <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD</button>
             
+            <button class="btn-mlb" id="jsonBtn" onclick="triggerJsonUpload()">JSON</button>
+            <input type="file" id="jsonFileInput" accept=".json" style="display: none;" onchange="handleJsonUpload(event)">
+            
             <div class="group-divider"></div>
-
+            
             <!-- 再生制御コア -->
             <button class="btn-mlb" onclick="seekRelative(-10)">-10s</button>
             <button class="btn-mlb" id="playPauseBtn" onclick="togglePlay()">PAUSE</button>
@@ -313,6 +322,10 @@
         const videoElement = document.getElementById('webcam');
         let smoothedKeypoints = [];
 
+        let poseActive = false;
+        // --- 【追記】YouTube同期骨格データ保持用 ---
+        let youtubePoseData = null;
+        
         // 1. カメラ初期化
         async function initCamera() {
             try {
@@ -606,6 +619,118 @@
                     canvasCtx.restore();
                 }
             }
+            if (player && isPlayerReady && youtubePoseData) {
+                const currentTime = player.getCurrentTime();
+                const ytPose = getYoutubePoseAtTime(currentTime);
+
+                if (ytPose) {
+                    // YouTube側表示領域のスケール定義
+                    let ytAreaWidth = canvasElement.width;
+                    let ytAreaHeight = canvasElement.height;
+                    let ytBaseOffsetX = 0;
+                    let ytBaseOffsetY = 0;
+
+                    if (activeMode === "MINI") {
+                        ytAreaWidth = canvasElement.width * 0.25;
+                        ytAreaHeight = ytAreaWidth * 9 / 16;
+                        ytBaseOffsetX = canvasElement.width - ytAreaWidth - 20;
+                        ytBaseOffsetY = 20;
+                    } else if (activeMode === "SPLIT: H") {
+                        ytAreaWidth = canvasElement.width / 2;
+                    } else if (activeMode === "SPLIT: V") {
+                        ytAreaHeight = canvasElement.height / 2;
+                    }
+
+                    // 元データのアスペクト比を16:9と仮定してマッピング
+                    const ytVideoWidth = 1280;
+                    const ytVideoHeight = 720;
+                    const ytVideoRatio = ytVideoWidth / ytVideoHeight;
+                    const ytAreaRatio = ytAreaWidth / ytAreaHeight;
+
+                    let ytScale;
+                    let ytOffsetX = 0;
+                    let ytOffsetY = 0;
+
+                    if (ytAreaRatio > ytVideoRatio) {
+                        ytScale = ytAreaHeight / ytVideoHeight;
+                        ytOffsetX = (ytAreaWidth - (ytVideoWidth * ytScale)) / 2;
+                    } else {
+                        ytScale = ytAreaWidth / ytVideoWidth;
+                        ytOffsetY = (ytAreaHeight - (ytVideoHeight * ytScale)) / 2;
+                    }
+
+                    const finalYtOffsetX = ytBaseOffsetX + ytOffsetX;
+                    const finalYtOffsetY = ytBaseOffsetY + ytOffsetY;
+
+                    // 座標マッピング関数 (YouTube動画のミラー反転に対応)
+                    const getProjectionX = (rawX) => {
+                        let finalX = rawX;
+                        // 0〜1に正規化された座標データの場合の変換
+                        if (rawX <= 1.0) finalX = rawX * ytVideoWidth;
+                        // ミラー反転
+                        if (isMirrored) finalX = ytVideoWidth - finalX;
+                        return finalX * ytScale + finalYtOffsetX;
+                    };
+
+                    const getProjectionY = (rawY) => {
+                        let finalY = rawY;
+                        if (rawY <= 1.0) finalY = rawY * ytVideoHeight;
+                        return finalY * ytScale + finalYtOffsetY;
+                    };
+
+                    const keypoints = ytPose.keypoints || ytPose;
+
+                    if (keypoints && Array.isArray(keypoints)) {
+                        canvasCtx.save();
+                        // 1. スケルトン（線）の描画
+                        for (let i = 0; i < connections.length; i++) {
+                            const pt1 = keypoints[connections[i][0]];
+                            const pt2 = keypoints[connections[i][1]];
+                            
+                            if (pt1 && pt2) {
+                                const score1 = pt1.score !== undefined ? pt1.score : 1.0;
+                                const score2 = pt2.score !== undefined ? pt2.score : 1.0;
+
+                                if (score1 > 0.20 && score2 > 0.20) {
+                                    const x1 = getProjectionX(pt1.x);
+                                    const y1 = getProjectionY(pt1.y);
+                                    const x2 = getProjectionX(pt2.x);
+                                    const y2 = getProjectionY(pt2.y);
+
+                                    canvasCtx.beginPath();
+                                    canvasCtx.moveTo(x1, y1);
+                                    canvasCtx.lineTo(x2, y2);
+                                    canvasCtx.strokeStyle = '#00f0ff'; // サイバーブルー
+                                    canvasCtx.lineWidth = 6;
+                                    canvasCtx.lineCap = 'round';
+                                    canvasCtx.shadowColor = '#00f0ff';
+                                    canvasCtx.shadowBlur = 10;
+                                    canvasCtx.stroke();
+                                }
+                            }
+                        }
+
+                        // 2. キーポイント（関節点）の描画
+                        keypoints.forEach((kp) => {
+                            const score = kp.score !== undefined ? kp.score : 1.0;
+                            if (score > 0.20) {
+                                const cx = getProjectionX(kp.x);
+                                const cy = getProjectionY(kp.y);
+                                canvasCtx.beginPath();
+                                canvasCtx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                                canvasCtx.fillStyle = '#ffffff';
+                                canvasCtx.fill();
+                            }
+                        });
+                        canvasCtx.restore();
+                    }
+                }
+            }
+
+
+
+
+            
             requestAnimationFrame(renderLoop);
         }
 
@@ -627,6 +752,63 @@
                 btn.innerText = "POSE";
                 btn.classList.remove('btn-active');
             }
+        }
+
+        // --- 【追記】JSON読み込み処理 ---
+        function triggerJsonUpload() {
+            document.getElementById('jsonFileInput').click();
+        }
+
+        function handleJsonUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    youtubePoseData = JSON.parse(e.target.result);
+                    document.getElementById('jsonBtn').classList.add('btn-active-blue');
+                    // JSON読込に成功したらキャンバスを自動でアクティブ化
+                    if (!poseActive) {
+                        togglePose();
+                    }
+                } catch (err) {
+                    alert('JSONの解析に失敗しました。形式を確認してください。');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // 時間同期して動画用の骨格を取得する関数
+        function getYoutubePoseAtTime(time) {
+            if (!youtubePoseData) return null;
+            
+            // 1. 配列データの場合 (例: 30fps)
+            if (Array.isArray(youtubePoseData)) {
+                const fps = 30; // データのFPSに合わせて調整してください
+                const frameIndex = Math.round(time * fps);
+                if (frameIndex >= 0 && frameIndex < youtubePoseData.length) {
+                    return youtubePoseData[frameIndex];
+                }
+            } 
+            // 2. キー（タイムスタンプ秒）オブジェクトの場合
+            else if (typeof youtubePoseData === 'object') {
+                const keys = Object.keys(youtubePoseData).map(Number).sort((a, b) => a - b);
+                if (keys.length === 0) return null;
+                
+                let closestKey = keys[0];
+                let minDiff = Math.abs(closestKey - time);
+                for (let i = 1; i < keys.length; i++) {
+                    const diff = Math.abs(keys[i] - time);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestKey = keys[i];
+                    }
+                }
+                return youtubePoseData[closestKey];
+            }
+            return null;
         }
     </script>
 </body>
