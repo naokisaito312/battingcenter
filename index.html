@@ -18,17 +18,17 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #050a18; /* スタジアムの夜空をイメージしたディープネイビー */
-            font-family: 'Arial Black', 'Impact', sans-serif;
+            background-color: #030712; /* より深い超ダークネイビー */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: row;
             transition: flex-direction 0.4s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        /* 映像要素のデフォルトスタイル */
+        /* 映像要素 */
         iframe, video, #player, #webcam {
-            background-color: #050a18;
+            background-color: #030712;
         }
 
         /* 自分のカメラ映像 */
@@ -39,12 +39,12 @@
             width: 100%;
             height: 100%;
             object-fit: contain; 
-            transform: scaleX(-1); /* 鏡のように見せるため反転 */
+            transform: scaleX(-1);
             z-index: 1;
             transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        /* プロの投球映像 (YouTube) のコンテナ */
+        /* プロの投球映像コンテナ */
         .video-container {
             position: absolute;
             top: 0;
@@ -54,7 +54,6 @@
             z-index: 2;
             pointer-events: none;
             transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-            perspective: 1000px; 
         }
 
         #player {
@@ -65,7 +64,6 @@
         }
 
         /* --- 画面モード（レイアウトCSS） --- */
-        /* OVERLAY (重畳) */
         .video-container.mode-overlay {
             top: 0; left: 0; width: 100%; height: 100%; opacity: 0.5; 
         }
@@ -73,17 +71,15 @@
             top: 0; left: 0; width: 100%; height: 100%;
         }
         
-        /* MINI (PIP) */
         .video-container.mode-mini {
-            top: 30px; left: calc(100vw - 30vw - 20px); width: 30vw; height: calc(30vw * 9 / 16);
-            opacity: 1.0 !important; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-            border-radius: 4px; overflow: hidden; border: 2px solid #00a86b; pointer-events: auto;
+            top: 20px; left: calc(100vw - 25vw - 20px); width: 25vw; height: calc(25vw * 9 / 16);
+            opacity: 1.0 !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+            border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 255, 136, 0.5); pointer-events: auto;
         }
         body.mode-mini-active #webcam {
             top: 0; left: 0; width: 100%; height: 100%;
         }
         
-        /* SPLIT: H (左右横並び) */
         .video-container.mode-split-h { 
             top: 0; left: 0; width: 50vw; height: 100vh; opacity: 1.0 !important; pointer-events: auto; 
         }
@@ -91,7 +87,6 @@
             top: 0; left: 50vw; width: 50vw; height: 100vh; 
         }
         
-        /* SPLIT: V (上下縦並び) */
         .video-container.mode-split-v { 
             top: 0; left: 0; width: 100vw; height: 50vh; opacity: 1.0 !important; pointer-events: auto; 
         }
@@ -99,11 +94,10 @@
             top: 50vh; left: 0; width: 100vw; height: 50vh; 
         }
 
-        /* YouTube動画のミラー反転 */
         .video-container.mirrored #player { transform: scaleX(-1); }
         iframe { width: 100%; height: 100%; border: none; }
 
-        /* 骨格描画用キャンバス */
+        /* 骨格キャンバス */
         #poseCanvas {
             position: absolute;
             top: 0;
@@ -115,141 +109,149 @@
             display: none;
         }
 
-        /* --- MLB風 GUI コントロールパネル --- */
+        /* --- 刷新：サイバーミニマル・コントロールバー --- */
         .controls-container {
             position: absolute;
-            bottom: 24px;
+            bottom: 16px; /* 画面下部にスリムに配置 */
             left: 50%;
             transform: translateX(-50%);
             z-index: 5;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
             width: max-content;
-            max-width: 95%;
+            max-width: 98%;
             pointer-events: none;
         }
 
         .control-group {
             pointer-events: auto;
-            background: rgba(10, 17, 40, 0.85); /* 濃紺のソリッドなバックプレート */
-            backdrop-filter: blur(10px);
-            border: 2px solid #1e2942;
-            border-top: 2px solid #00a86b; /* 上部にスタジアムグリーン */
-            padding: 10px 20px;
-            border-radius: 4px;
+            background: rgba(8, 12, 24, 0.75); /* より高い透明度をもつガラスエフェクト */
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 2px solid rgba(0, 255, 136, 0.4); /* 下部に超薄型の発光ライン */
+            padding: 6px 14px; /* 縦幅を限界まで削減 */
+            border-radius: 30px; /* 角を落として近未来的なカプセル形状に */
             display: flex;
             flex-direction: row;
             align-items: center;
-            gap: 14px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            gap: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
         }
 
-        /* パネル内のセクションラベル */
-        .group-label {
-            color: #00a86b;
-            font-size: 11px;
-            letter-spacing: 1.5px;
-            white-space: nowrap;
-            border-right: 2px solid #1e2942;
-            padding-right: 12px;
-            margin-right: -4px;
+        .group-divider {
+            width: 1px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.15);
+            margin: 0 4px;
         }
 
-        /* URL入力エリア */
+        /* ミニマルURL入力エリア */
         .controls-container input[type="text"] {
-            width: 160px;
-            padding: 8px 12px;
-            border-radius: 2px;
-            border: 1px solid #3a4b6e;
-            background: #121b2d;
+            width: 110px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
             color: #ffffff;
-            font-size: 13px;
-            font-family: sans-serif;
+            font-size: 11px;
             outline: none;
+            transition: all 0.2s ease;
+        }
+        .controls-container input[type="text"]:focus {
+            border-color: rgba(0, 255, 136, 0.5);
+            width: 140px; /* フォーカス時のみ少し広がるスマートUI */
         }
 
-        /* MLB風フラットボタン */
+        /* 近未来的フラットボタン */
         .btn-mlb {
-            padding: 8px 14px;
-            border-radius: 2px;
-            border: none;
-            background: #ffffff;
-            color: #0a1128;
-            font-weight: 900;
-            font-size: 11px;
-            letter-spacing: 1px;
+            padding: 5px 11px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 600;
+            font-size: 10px;
+            letter-spacing: 0.5px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            text-transform: uppercase;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
             white-space: nowrap;
         }
 
         .btn-mlb:hover {
-            background: #00a86b;
+            background: rgba(255, 255, 255, 0.15);
             color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.2);
         }
 
-        /* プリセット用ボタン */
+        /* プリセット選択用の少し落ち着いたデザイン */
         .btn-preset {
-            background: #223154;
-            color: #ffffff;
-            border: 1px solid #3a4b6e;
+            background: rgba(0, 255, 136, 0.04);
+            border: 1px solid rgba(0, 255, 136, 0.15);
+            color: rgba(0, 255, 136, 0.85);
+        }
+        .btn-preset:hover {
+            background: rgba(0, 255, 136, 0.12);
+            color: #00ff88;
         }
 
-        /* メインアクションボタン(LOAD) */
+        /* メインの読み込み・アクティブ状態（鮮烈なサイバーグリーン） */
         .btn-load {
             background: #00a86b;
-            color: white;
+            color: #ffffff;
+            border: none;
         }
         .btn-load:hover {
-            background: #00c880;
+            background: #00ff88;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
         }
 
-        /* トグル状態で色が変わるボタン設定 */
+        /* アクティブ・トグル状態 */
         .btn-active {
-            background: #00a86b !important;
-            color: #ffffff !important;
-            border: 1px solid #00c880;
+            background: rgba(0, 255, 136, 0.2) !important;
+            color: #00ff88 !important;
+            border: 1px solid rgba(0, 255, 136, 0.4) !important;
+            text-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
         }
 
-        /* 非アクティブなUI要素用（重畳モード以外での透明度スライダーなど） */
         .disabled-ui {
-            opacity: 0.3;
+            opacity: 0.2;
             pointer-events: none;
         }
 
-        /* スライダー（透明度調整） */
+        /* スリムスライダー */
         .controls-container label {
-            color: #ffffff;
-            font-size: 11px;
-            font-family: sans-serif;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 9px;
             font-weight: bold;
             display: flex;
             align-items: center;
-            gap: 8px;
-            letter-spacing: 1px;
+            gap: 6px;
+            letter-spacing: 0.5px;
             white-space: nowrap;
+            margin-left: 4px;
         }
 
         input[type="range"] {
             -webkit-appearance: none;
-            background: #121b2d;
-            height: 6px;
-            width: 90px;
-            border: 1px solid #3a4b6e;
+            background: rgba(255, 255, 255, 0.1);
+            height: 3px; /* 限界までスリムに */
+            width: 60px;
+            border-radius: 2px;
             outline: none;
         }
 
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
-            width: 14px;
-            height: 14px;
-            background: #00a86b;
+            width: 10px;
+            height: 10px;
+            background: #00ff88;
             cursor: pointer;
-            border-radius: 2px;
+            border-radius: 50%;
+            box-shadow: 0 0 6px #00ff88;
+            transition: transform 0.1s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
         }
     </style>
 </head>
@@ -266,38 +268,37 @@
     <!-- 骨格描画用キャンバス -->
     <canvas id="poseCanvas"></canvas>
 
-    <!-- 下部操作メニュー -->
+    <!-- 下部操作メニュー（1列のミニマルデザインに集約） -->
     <div class="controls-container">
-        <!-- プリセット動画選択用クイックバー -->
         <div class="control-group">
-            <span class="group-label">PLAY PRESET</span>
-            <button class="btn-mlb btn-preset btn-active" id="preset1" onclick="loadPresetVideo('lFxjc-gulUk', 'preset1')">① プロ投手 投球映像</button>
-            <button class="btn-mlb btn-preset" id="preset2" onclick="loadPresetVideo('O4qTiUaqFV0', 'preset2')">② 大谷翔平 フォーム</button>
-        </div>
-
-        <!-- メインコントロールバー -->
-        <div class="control-group">
-            <span class="group-label">CONTROLS</span>
-            <!-- 任意のYouTube読み込み -->
-            <input type="text" id="youtubeUrl" placeholder="PASTE YOUTUBE URL...">
-            <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD URL</button>
+            <!-- プリセット切替 -->
+            <button class="btn-mlb btn-preset btn-active" id="preset1" onclick="loadPresetVideo('lFxjc-gulUk', 'preset1')">PITCHER</button>
+            <button class="btn-mlb btn-preset" id="preset2" onclick="loadPresetVideo('O4qTiUaqFV0', 'preset2')">OTANI</button>
             
-            <!-- 再生制御 -->
+            <div class="group-divider"></div>
+
+            <!-- URL読み込み -->
+            <input type="text" id="youtubeUrl" placeholder="PASTE URL...">
+            <button class="btn-mlb btn-load" onclick="loadVideo()">LOAD</button>
+            
+            <div class="group-divider"></div>
+
+            <!-- 再生制御コア -->
             <button class="btn-mlb" onclick="seekRelative(-10)">-10s</button>
             <button class="btn-mlb" id="playPauseBtn" onclick="togglePlay()">PAUSE</button>
             <button class="btn-mlb" onclick="seekRelative(10)">+10s</button>
             
-            <!-- 【追加】速度調整 & 【追加】画面モード切り替え -->
-            <button class="btn-mlb" id="speedBtn" onclick="toggleSpeed()">SPEED: 1.0x</button>
-            <button class="btn-mlb" id="modeBtn" onclick="toggleMode()">MODE: OVERLAY</button>
+            <div class="group-divider"></div>
+
+            <!-- アプリケーション設定系 -->
+            <button class="btn-mlb" id="speedBtn" onclick="toggleSpeed()">1.0x</button>
+            <button class="btn-mlb" id="modeBtn" onclick="toggleMode()">OVERLAY</button>
+            <button class="btn-mlb" id="mirrorBtn" onclick="toggleYoutubeMirror()">MIRROR</button>
+            <button class="btn-mlb" id="poseBtn" onclick="togglePose()">POSE</button>
             
-            <!-- 特殊エフェクト系 -->
-            <button class="btn-mlb" id="mirrorBtn" onclick="toggleYoutubeMirror()">MIRROR: OFF</button>
-            <button class="btn-mlb" id="poseBtn" onclick="togglePose()">POSE: OFF</button>
-            
-            <!-- 透明度調整スライダー -->
+            <!-- 不透明度調整 -->
             <label id="opacityLabel">
-                OPACITY
+                OPC
                 <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.05" value="0.5" oninput="changeOpacity(this.value)">
             </label>
         </div>
@@ -311,7 +312,6 @@
         let detector = null;
         let poseActive = false;
 
-        // 画面モード用管理変数[cite: 1]
         let currentModeIndex = 0; 
         const modes = ["OVERLAY", "MINI", "SPLIT: H", "SPLIT: V"];[cite: 1]
 
@@ -370,7 +370,7 @@
             }
         }
         
-        // 3. 動画読み込み・コントロール関数
+        // 3. 各種ハンドリング関数
         function loadVideo() {
             const input = document.getElementById('youtubeUrl').value;
             let videoId = input;
@@ -384,7 +384,7 @@
                 document.getElementById('preset1').classList.remove('btn-active');
                 document.getElementById('preset2').classList.remove('btn-active');
             } else {
-                alert('有効なYouTubeのURLを入力するか、読み込み準備が整うまでお待ちください。');
+                alert('有効なYouTubeのURLを入力してください。');
             }
         }
 
@@ -414,13 +414,12 @@
             player.seekTo(player.getCurrentTime() + seconds, true);
         }
 
-        // 【復活】再生速度調整ロジック[cite: 1]
         let currentSpeed = 1.0;[cite: 1]
         function toggleSpeed() {
             if (!player || !isPlayerReady) return;
             currentSpeed = currentSpeed === 1.0 ? 0.75 : (currentSpeed === 0.75 ? 0.5 : 1.0);[cite: 1]
             player.setPlaybackRate(currentSpeed);[cite: 1]
-            document.getElementById('speedBtn').innerText = `SPEED: ${currentSpeed}x`;[cite: 1]
+            document.getElementById('speedBtn').innerText = `${currentSpeed}x`;[cite: 1]
             
             if (currentSpeed !== 1.0) {
                 document.getElementById('speedBtn').classList.add('btn-active');
@@ -429,7 +428,6 @@
             }
         }
 
-        // 【復活】画面レイアウト切替ロジック（ベースコードの仕組みを最適化）[cite: 1]
         function toggleMode() {
             const container = document.getElementById('videoContainer');[cite: 1]
             const modeBtn = document.getElementById('modeBtn');[cite: 1]
@@ -438,17 +436,17 @@
         
             currentModeIndex = (currentModeIndex + 1) % modes.length;[cite: 1]
             const activeMode = modes[currentModeIndex];[cite: 1]
-            modeBtn.innerText = `MODE: ${activeMode}`;[cite: 1]
+            modeBtn.innerText = activeMode;
         
-            // クラススタイルの一斉リセット[cite: 1]
             container.className = "video-container";[cite: 1]
             body.className = "";[cite: 1]
-            container.style.opacity = ""; [cite: 1]
+            container.style.opacity = "";[cite: 1]
             opacityLabel.classList.add('disabled-ui');[cite: 1]
         
             if (isMirrored) container.classList.add('mirrored');[cite: 1]
+            if (activeMode !== "OVERLAY") modeBtn.classList.add('btn-active');
+            else modeBtn.classList.remove('btn-active');
         
-            // モードに応じたCSSクラスのアサイン[cite: 1]
             if (activeMode === "OVERLAY") {[cite: 1]
                 container.classList.add('mode-overlay');[cite: 1]
                 body.classList.add('mode-overlay-active');[cite: 1]
@@ -473,10 +471,8 @@
             container.classList.toggle('mirrored', isMirrored);[cite: 1]
             
             if(isMirrored) {
-                btn.innerText = "MIRROR: ON";
                 btn.classList.add('btn-active');
             } else {
-                btn.innerText = "MIRROR: OFF";
                 btn.classList.remove('btn-active');
             }
         }
@@ -484,13 +480,12 @@
         function changeOpacity(value) {
             currentOpacity = value;
             const container = document.getElementById('videoContainer');
-            // OVERLAYモードの時だけ背後のスライダーによる不透明度変更を反映[cite: 1]
             if (container.classList.contains('mode-overlay')) {[cite: 1]
                 container.style.opacity = value;[cite: 1]
             }
         }
 
-        // キーボードショートカット
+        // ショートカット
         document.addEventListener('keydown', (event) => {
             if (document.activeElement.tagName === 'INPUT') return;
             if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
@@ -498,20 +493,20 @@
             else if (event.code === 'ArrowRight') { event.preventDefault(); seekRelative(10); }
         });
 
-        // 4. 骨格検出 (MoveNet) ロジック
+        // 4. MoveNet 骨格ロジック
         async function initPoseDetection() {
             if (window.tf) { tf.env().set('WEBGL_FLUSH_THRESHOLD', -1); }[cite: 1]
             detector = await poseDetection.createDetector([cite: 1]
-                poseDetection.SupportedModels.MoveNet, [cite: 1]
+                poseDetection.SupportedModels.MoveNet,[cite: 1]
                 { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING }[cite: 1]
             );
             renderLoop();[cite: 1]
         }
 
         const connections = [
-            [5, 6], [5, 7], [7, 9], [6, 8], [8, 10], // 上半身・腕[cite: 1]
-            [5, 11], [6, 12], [11, 12],               // 体幹[cite: 1]
-            [11, 13], [13, 15], [12, 14], [14, 16]    // 下半身・足[cite: 1]
+            [5, 6], [5, 7], [7, 9], [6, 8], [8, 10],
+            [5, 11], [6, 12], [11, 12],
+            [11, 13], [13, 15], [12, 14], [14, 16]
         ];
 
         async function renderLoop() {
@@ -527,20 +522,19 @@
             }
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-            // 現在の画面モードに応じた描画領域の計算調整（左右分割・上下分割に対応）[cite: 1]
             const activeMode = modes[currentModeIndex];[cite: 1]
             let camAreaWidth = canvasElement.width;[cite: 1]
             let camAreaHeight = canvasElement.height;[cite: 1]
             let camBaseOffsetX = 0;[cite: 1]
             let camBaseOffsetY = 0;[cite: 1]
 
-            if (activeMode === "SPLIT: H") { [cite: 1]
-                camAreaWidth = canvasElement.width / 2; [cite: 1]
-                camBaseOffsetX = canvasElement.width / 2; [cite: 1]
-            } [cite: 1]
-            else if (activeMode === "SPLIT: V") { [cite: 1]
-                camAreaHeight = canvasElement.height / 2; [cite: 1]
-                camBaseOffsetY = canvasElement.height / 2; [cite: 1]
+            if (activeMode === "SPLIT: H") {[cite: 1]
+                camAreaWidth = canvasElement.width / 2;[cite: 1]
+                camBaseOffsetX = canvasElement.width / 2;[cite: 1]
+            }[cite: 1]
+            else if (activeMode === "SPLIT: V") {[cite: 1]
+                camAreaHeight = canvasElement.height / 2;[cite: 1]
+                camBaseOffsetY = canvasElement.height / 2;[cite: 1]
             }[cite: 1]
 
             const videoRatio = videoElement.videoWidth / videoElement.videoHeight;
@@ -584,7 +578,6 @@
                     };
 
                     canvasCtx.save();
-                    // 線の描画[cite: 1]
                     for (let i = 0; i < connections.length; i++) {
                         const pt1 = smoothedKeypoints[connections[i][0]];[cite: 1]
                         const pt2 = smoothedKeypoints[connections[i][1]];[cite: 1]
@@ -598,22 +591,21 @@
                             canvasCtx.beginPath();
                             canvasCtx.moveTo(x1, y1);
                             canvasCtx.lineTo(x2, y2);
-                            canvasCtx.strokeStyle = '#00ff88'; /* スタジアム芝ネオン */[cite: 1]
-                            canvasCtx.lineWidth = 8;[cite: 1]
+                            canvasCtx.strokeStyle = '#00ff88'; /* サイバーネオングリーン */[cite: 1]
+                            canvasCtx.lineWidth = 6; /* 骨格の線も少しスタイリッシュに細く調整 */
                             canvasCtx.lineCap = 'round';[cite: 1]
                             canvasCtx.shadowColor = '#00ff88';[cite: 1]
-                            canvasCtx.shadowBlur = 15;[cite: 1]
+                            canvasCtx.shadowBlur = 10;
                             canvasCtx.stroke();
                         }
                     }
 
-                    // 関節ドットの描画[cite: 1]
                     smoothedKeypoints.forEach((kp) => {
                         if (kp.score > 0.20) {
                             const cx = getMirroredX(kp.x);[cite: 1]
                             const cy = kp.y * scale + finalCamOffsetY;[cite: 1]
                             canvasCtx.beginPath();
-                            canvasCtx.arc(cx, cy, 5, 0, 2 * Math.PI);[cite: 1]
+                            canvasCtx.arc(cx, cy, 4, 0, 2 * Math.PI);
                             canvasCtx.fillStyle = '#ffffff';[cite: 1]
                             canvasCtx.fill();
                         }
@@ -624,23 +616,22 @@
             requestAnimationFrame(renderLoop);
         }
 
-        // 5. 骨格表示トグル
         async function togglePose() {
             poseActive = !poseActive;[cite: 1]
             const btn = document.getElementById('poseBtn');
             if (poseActive) {
                 canvasElement.style.display = 'block';[cite: 1]
-                btn.innerText = "LOADING..."; [cite: 1]
+                btn.innerText = "LOAD..."; 
                 btn.disabled = true;[cite: 1]
                 if (!detector) {[cite: 1]
                     await initPoseDetection();[cite: 1]
                 }
                 btn.disabled = false;[cite: 1]
-                btn.innerText = "POSE: ON";
+                btn.innerText = "POSE";
                 btn.classList.add('btn-active');
             } else {
                 canvasElement.style.display = 'none';[cite: 1]
-                btn.innerText = "POSE: OFF";
+                btn.innerText = "POSE";
                 btn.classList.remove('btn-active');
             }
         }
